@@ -1,0 +1,922 @@
+<html>
+
+<!--
+Enrico Puppo, Università di Genova, 90258 - Computer Graphics and Augmented Reality
+Original code courtesy of Marco Tarini, Università dell'Insubria 
+Implementation 08: composing scenes
+-->
+
+<head>
+	<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"> 
+	<meta charset="utf-8" />
+
+    <!-- SHADERS -->
+
+    <script type="text/glsl" id="vertexShader">
+        uniform mat4 mvp;  // model-view-projection 
+		attribute vec3 vertexPos;
+		attribute vec3 normal; // per vertex - object space!
+		varying vec3 norm_i;
+
+		void main(void) {
+			gl_Position = mvp*vec4( vertexPos , 1.0);
+			norm_i = normal;
+		}
+	</script>
+
+    <script type="text/glsl" id="fragmentShader">
+        precision highp float;
+		varying vec3 norm_i;
+		uniform vec3 lightDir; 
+		uniform vec3 halfWay; 
+		uniform vec3 colDiffuse;  
+
+		vec3 lighting( vec3 norm ) {
+			const vec3 colAmbient = vec3(0.25,0.15,0.2)*1.0;
+			const vec3 colSpecular = vec3(0.4);
+			const float glossiness = 120.0;
+			
+			float diffuse = max(  dot( norm, lightDir ) , 0.0 );
+			float ambient = max( -dot( norm, lightDir ) , 0.0 ); // trick
+			float specular = pow(max(dot(norm,halfWay),0.0), glossiness);
+			return colDiffuse  * diffuse
+				 + colAmbient  * ambient
+				 + colSpecular * specular;
+		}
+
+		void main(void)
+		{
+			vec3 col = lighting( normalize(norm_i) );
+			gl_FragColor = vec4( col , 1.0);
+		}
+	</script>
+    
+    <script type="text/glsl" id="vertexShaderTexture">
+        uniform mat4 mvp;  
+        attribute vec3 vertexPos;
+        attribute vec3 normal; 
+        attribute vec2 vertexTextCoor;
+        
+        varying vec3 norm_i;
+        varying vec2 fragTextCoord;
+
+        void main(void) {
+            gl_Position = mvp*vec4( vertexPos , 1.0);
+            fragTextCoord = vertexTextCoor;
+            norm_i = normal;
+        }
+    </script>
+
+    <script type="text/glsl" id="fragmentShaderTexture">
+        precision highp float;
+        varying vec2 fragTextCoord;
+        varying vec3 norm_i;
+
+        uniform vec3 lightDir;
+        uniform vec3 halfWay; 
+        uniform sampler2D sampler;
+
+        vec3 lighting( vec3 norm, vec4 textColor ) {
+            const vec3 colAmbient = vec3(0.25,0.15,0.2)*1.0;
+            const vec3 colSpecular = vec3(0.4);
+            const float glossiness = 40.0;
+            
+            float diffuse = max(  dot( norm, lightDir ) , 0.1 );
+            float ambient = max( -dot( norm, lightDir ) , 0.0 ); // trick
+            float specular = pow(max(dot(norm,halfWay),0.0), glossiness);
+            return textColor.rgb * diffuse
+                 + colAmbient  * ambient
+                 + colSpecular * specular;
+        }
+
+        void main(void)
+        {
+            highp vec4 texelColor = texture2D(sampler, fragTextCoord); 
+            vec3 col = lighting( normalize(norm_i), texelColor );
+            gl_FragColor = vec4( col , texelColor.a);
+        }
+    </script>
+    
+        <script type="text/glsl" id="vertexShaderNormal">
+        uniform mat4 mvp;   
+        attribute vec3 vertexPos;
+        attribute vec3 normal; 
+        attribute vec3 tangent;
+        attribute vec2 vertexTextCoor;
+        
+        varying vec3 norm_i;
+        varying vec3 tang_i;
+        varying vec2 fragTextCoord;
+
+        void main(void) {
+            gl_Position = mvp*vec4( vertexPos , 1.0);
+            fragTextCoord = vertexTextCoor;
+            norm_i = normal;
+            tang_i = tangent;
+
+        }
+    </script>
+
+    <script type="text/glsl" id="fragmentShaderNormal">
+        precision highp float;
+        varying vec2 fragTextCoord;
+        varying vec3 norm_i;
+        varying vec3 tang_i;
+
+        uniform vec3 lightDir; 
+        uniform vec3 halfWay; 
+        uniform sampler2D sampler;
+        uniform sampler2D sampler2;
+
+        vec3 CalcBumpedNormal(){
+            vec3 Normal = normalize(norm_i);
+            vec3 Tangent = normalize(tang_i);
+            Tangent = normalize(Tangent - dot(Tangent, Normal) * Normal);
+            vec3 Bitangent = cross(Tangent, Normal);
+            vec3 BumpMapNormal = texture2D(sampler2, fragTextCoord).xyz;
+            BumpMapNormal = 2.0 * BumpMapNormal - vec3(1.0, 1.0, 1.0);
+            vec3 NewNormal;
+            mat3 TBN = mat3(Tangent, Bitangent, Normal);
+            NewNormal = TBN * BumpMapNormal;
+            NewNormal = normalize(NewNormal);
+            return NewNormal;
+        }
+
+
+        vec3 lighting( vec3 norm, vec4 textColor ) {
+            const vec3 colAmbient = vec3(0.25,0.15,0.2)*1.0;
+            const vec3 colSpecular = vec3(0.4);
+            const float glossiness = 40.0;
+            
+            float diffuse = max(  dot( norm, lightDir ) , 0.1 );
+            float ambient = max( -dot( norm, lightDir ) , 0.0 ); // trick
+            float specular = pow(max(dot(norm,halfWay),0.0), glossiness);
+            return textColor.rgb * diffuse
+                 + colAmbient  * ambient
+                 + colSpecular * specular;
+        }
+
+        void main(void)
+        {
+            highp vec4 texelColor = texture2D(sampler, fragTextCoord); 
+            vec3 col = lighting( CalcBumpedNormal(), texelColor );
+            gl_FragColor = vec4( col , texelColor.a);
+        }
+    </script>
+    
+        <script type="text/glsl" id="vertexShaderColor">
+        uniform mat4 mvp;  // model-view-projection 
+		attribute vec3 vertexPos;
+
+
+		void main(void) {
+			gl_Position = mvp*vec4( vertexPos , 1.0);
+		}
+	</script>
+
+    <script type="text/glsl" id="fragmentShaderColor">
+        precision highp float;
+		uniform vec3 colDiffuse;  // material: different for each object
+
+		void main(void)
+		{
+			gl_FragColor = vec4( colDiffuse , 1.0);
+		}
+	</script>
+    <!-- JAVASCRIPT CODE -->
+
+    <script type="text/javascript" src="matrices.js"></script>
+
+    <script type="text/javascript" src="mesh.js"></script>
+
+    <script type="text/javascript" src="matrixStack.js"></script>
+	
+	<script type="text/javascript" src="raycasting.js"></script>
+	
+	<script type="text/javascript" src="gamemodel.js"></script>
+    
+    <script type="text/javascript" src="quaternions.js"></script>
+
+
+    <script type="text/javascript">
+		/* Constants */
+		// Locations (indices) of the attributes
+        const posAttributeIndex = 0;
+        const normAttributeIndex = 1;
+        const textAttributeIndex = 2;
+		const tangAttributeIndex = 3;
+
+        /* Global variables */
+		// WebGL context and canvas
+        var gl,canvas,boundingRect; 
+        // Shader programs
+        var basicShaderProgram,textureShaderProgram,normalShaderProgram,colorShaderProgram;
+        var curShader = 0;
+        // Locations of the uniform "mvp", "lightDir", etc
+        var mvp_loc,lightDir_loc,halfWay_loc,colDiffuse_loc,sampler_loc,sampler_loc2;
+        // Meshes (in GPU)
+        var cube, cone, cyl, torus;
+		// Bounding boxes
+		var board_bounds = null;
+		var sceneRotation = null;
+		// Color (set for each object in basic shader)
+		var colDiffuse = [0.5, 0.5, 0.5];
+		
+		/* Game Engine variables */
+		var gameModel;
+		var selected = [];
+
+		function setBoardBounds(m,vmin,vmax){
+			board_bounds = new BoundingBox(multMatrixVec(m,vmin),multMatrixVec(m,vmax));
+		}
+
+        function setColor(r, g, b) {
+            colDiffuse[0] = r;
+            colDiffuse[1] = g;
+            colDiffuse[2] = b;
+        };
+
+       var camera = {
+			// Camera Dist
+            dist: 3,
+            // Camera Shift
+            x: 0.0,
+            y: 0.0,
+                    
+            getView: function() {
+                var res = identityMatrix();
+				// Put the camera at a certain distance
+                var m2 = translationMatrix(0, 0, -this.dist);
+                // Pan translations
+                var pan = translationMatrix(this.x, this.y, 0);
+                res = multMatrix(res, m2);
+                res = multMatrix(res, pan);
+                return res;
+            }
+        };
+		
+		var trackball = {
+			// Trackball Origin
+			origin: [0,0,-camera.dist],
+			// Radius
+			r: 10,
+			// Current trackball rotation
+			qcurr: Quaternion(1,[0,0,0]),
+			// Starting point of the rotation
+			p0: [0,0,0],
+			
+			// Function to evaluate the new rotation
+			calculateNewRotation: function(p1){
+				// Evaluate P0'
+				var p0is = Math.sqrt((this.r*this.r)/(this.p0[0]*this.p0[0] + this.p0[1]*this.p0[1] + camera.dist*camera.dist));
+				var p0i= VecXScalar(this.p0, p0is);
+				// Evaluate P1'
+				var p1is = Math.sqrt((this.r*this.r)/(p1[0]*p1[0] + p1[1]*p1[1] + camera.dist*camera.dist));
+				var p1i = VecXScalar(p1, p1is);
+				// Evaluate alpha and v
+				var alpha = subtract(p1i, p0i);
+				alpha = -Math.sqrt(alpha[0]*alpha[0]+alpha[1]*alpha[1]+alpha[2]*alpha[2]);
+				var a = subtract(p1,this.origin);
+				var b = subtract(this.p0,this.origin);
+				var v = normalize(cross(b, a));
+				// Update Qcurr
+				var qnew  =  AxisAngle2Quaternion(v, alpha);
+				this.qcurr = normalizeQuat(multQuaternion(this.qcurr, qnew));
+				// Set next starting point of rotation to p1
+				this.p0 = vec3(p1[0],p1[1],p1[2]);
+			}
+		};
+
+        /* Initialization */
+		function setupGameEngine(){
+			gameModel = new NineMensMorris();
+		}
+		
+        function setupWebGL() {
+            canvas = document.getElementById("A-CANVAS");
+			boundingRect = canvas.getBoundingClientRect();
+            gl = canvas.getContext("experimental-webgl"); // or, "webgl"
+			canvas.onmousemove = myMouseMove;
+			canvas.onmousedown = myMouseDown;
+			canvas.onmouseup = myMouseUp;
+            document.onkeydown = myKeyDown;
+        }
+        
+        function setupTexture() {
+            texture_object = gl.createTexture();    
+            gl.bindTexture(gl.TEXTURE_2D, texture_object);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, document.getElementById('textImg'));
+            
+            normal_object = gl.createTexture();       
+            gl.bindTexture(gl.TEXTURE_2D, normal_object);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, document.getElementById('normImg'));         
+        }
+
+        function setupWhatToDraw() {
+            // CpuMesh and GpuMesh defined in module mesh.js 
+            // unique CPU mesh buffer to transfer data to the GPU
+            var unaMesh = Object.create(CpuMesh);
+
+            // various GPU meshes used by the program
+            cube = Object.create(GpuMesh);
+            cone = Object.create(GpuMesh);
+            cyl = Object.create(GpuMesh);
+            torus = Object.create(GpuMesh);
+            cube.init(gl);
+            cone.init(gl);
+            torus.init(gl);
+
+            // create & transfer meshes
+            unaMesh.makeCubeWithSeams();
+            cube.storeFromCpu(gl, unaMesh);
+            unaMesh.makeCone(60);
+            cone.storeFromCpu(gl, unaMesh);
+            unaMesh.makeCylinder(60);
+            cyl.storeFromCpu(gl, unaMesh);
+            unaMesh.makeTorus(60);
+            torus.storeFromCpu(gl, unaMesh);
+        }
+
+        function setupHowToDraw() {	 
+			// set OpenGL parameters
+			gl.disable( gl.CULL_FACE ); // back face culling
+			gl.enable( gl.DEPTH_TEST ); 
+			
+			// BASIC SHADER
+			// set the VERTEX SHADER
+			var vsSource = document.getElementById("vertexShader").textContent;
+			var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+			gl.shaderSource(vertexShader, vsSource);
+			gl.compileShader(vertexShader);
+			debugShader(vertexShader);			
+			// set the FRAGMENT SHADER
+			var fsSource = document.getElementById("fragmentShader").textContent;
+			var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+			gl.shaderSource(fragmentShader, fsSource);
+			gl.compileShader(fragmentShader);
+			debugShader(fragmentShader);
+			// join them in a "PROGRAM"
+			basicShaderProgram = gl.createProgram();
+			gl.attachShader(basicShaderProgram, vertexShader);
+			gl.attachShader(basicShaderProgram, fragmentShader);
+			// tell webGL where to find attirbutes
+			gl.bindAttribLocation( basicShaderProgram,  posAttributeIndex, "vertexPos" );
+			gl.bindAttribLocation( basicShaderProgram,  normAttributeIndex, "normal" );
+            tangAttributeIndex
+			gl.linkProgram(basicShaderProgram);
+			// ask webGL where to put uniforms
+			mvp_loc = gl.getUniformLocation( basicShaderProgram, "mvp" );
+			lightDir_loc = gl.getUniformLocation( basicShaderProgram, "lightDir" );
+			halfWay_loc = gl.getUniformLocation( basicShaderProgram, "halfWay" );
+			colDiffuse_loc = gl.getUniformLocation( basicShaderProgram, "colDiffuse" );
+			// Use basic shader
+			gl.useProgram(basicShaderProgram);
+
+            //Color SHADER
+			// set the VERTEX SHADER
+			vsSource = document.getElementById("vertexShaderColor").textContent;
+			vertexShader = gl.createShader(gl.VERTEX_SHADER);
+			gl.shaderSource(vertexShader, vsSource);
+			gl.compileShader(vertexShader);	  
+			debugShader(vertexShader);
+			// set the FRAGMENT SHADER
+			fsSource = document.getElementById("fragmentShaderColor").textContent;
+			fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+			gl.shaderSource(fragmentShader, fsSource);
+			gl.compileShader(fragmentShader);
+			debugShader(fragmentShader);
+			// join them in a "PROGRAM"
+			colorShaderProgram = gl.createProgram();
+			gl.attachShader(colorShaderProgram, vertexShader);
+			gl.attachShader(colorShaderProgram, fragmentShader);
+			// tell webGL where to find attirbutes
+            
+			gl.bindAttribLocation( colorShaderProgram,  posAttributeIndex, "vertexPos" );
+			gl.linkProgram(colorShaderProgram);
+
+			
+			//TEXTURE SHADER
+			// set the VERTEX SHADER
+			vsSource = document.getElementById("vertexShaderTexture").textContent;
+			vertexShader = gl.createShader(gl.VERTEX_SHADER);
+			gl.shaderSource(vertexShader, vsSource);
+			gl.compileShader(vertexShader);	  
+			debugShader(vertexShader);
+			// set the FRAGMENT SHADER
+			fsSource = document.getElementById("fragmentShaderTexture").textContent;
+			fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+			gl.shaderSource(fragmentShader, fsSource);
+			gl.compileShader(fragmentShader);
+			debugShader(fragmentShader);
+			// join them in a "PROGRAM"
+			textureShaderProgram = gl.createProgram();
+			gl.attachShader(textureShaderProgram, vertexShader);
+			gl.attachShader(textureShaderProgram, fragmentShader);
+			// tell webGL where to find attirbutes
+			gl.bindAttribLocation( textureShaderProgram,  posAttributeIndex, "vertexPos" );
+			gl.bindAttribLocation( textureShaderProgram,  normAttributeIndex, "normal" );
+			gl.bindAttribLocation( textureShaderProgram,  textAttributeIndex, "vertexTextCoor" );
+            
+			gl.linkProgram(textureShaderProgram);
+            
+            //NORMAL SHADER
+			// set the VERTEX SHADER
+			vsSource = document.getElementById("vertexShaderNormal").textContent;
+			vertexShader = gl.createShader(gl.VERTEX_SHADER);
+			gl.shaderSource(vertexShader, vsSource);
+			gl.compileShader(vertexShader);	  
+			debugShader(vertexShader);
+			// set the FRAGMENT SHADER
+			fsSource = document.getElementById("fragmentShaderNormal").textContent;
+			fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+			gl.shaderSource(fragmentShader, fsSource);
+			gl.compileShader(fragmentShader);
+			debugShader(fragmentShader);
+			// join them in a "PROGRAM"
+			normalShaderProgram = gl.createProgram();
+			gl.attachShader(normalShaderProgram, vertexShader);
+			gl.attachShader(normalShaderProgram, fragmentShader);
+			// tell webGL where to find attirbutes
+			gl.bindAttribLocation( normalShaderProgram,  posAttributeIndex, "vertexPos" );
+			gl.bindAttribLocation( normalShaderProgram,  normAttributeIndex, "normal" );
+            gl.bindAttribLocation( normalShaderProgram,  tangAttributeIndex, "tangent" );
+			gl.bindAttribLocation( normalShaderProgram,  textAttributeIndex, "vertexTextCoor" );
+            
+			gl.linkProgram(normalShaderProgram);
+			// Setup texture
+			setupTexture();
+		}
+    
+		function toggleShader(val){
+            curShader = val;
+			if (curShader == 0) {
+				mvp_loc = gl.getUniformLocation( basicShaderProgram, "mvp" );
+				lightDir_loc = gl.getUniformLocation( basicShaderProgram, "lightDir" );
+				halfWay_loc = gl.getUniformLocation( basicShaderProgram, "halfWay" );
+				colDiffuse_loc = gl.getUniformLocation( basicShaderProgram, "colDiffuse" );
+				gl.useProgram(basicShaderProgram);
+			} 
+            if (curShader == 1 ){
+				mvp_loc = gl.getUniformLocation( textureShaderProgram, "mvp" );
+				lightDir_loc = gl.getUniformLocation( textureShaderProgram, "lightDir" );
+				halfWay_loc = gl.getUniformLocation( textureShaderProgram, "halfWay" );
+				sampler_loc = gl.getUniformLocation(textureShaderProgram, "sampler");
+				gl.useProgram(textureShaderProgram);
+			}
+			if (curShader == 2){
+				mvp_loc = gl.getUniformLocation( colorShaderProgram, "mvp" );
+				colDiffuse_loc = gl.getUniformLocation( colorShaderProgram, "colDiffuse" );
+				gl.useProgram(colorShaderProgram);
+			}
+            if (curShader == 3 ){
+				mvp_loc = gl.getUniformLocation( normalShaderProgram, "mvp" );
+				lightDir_loc = gl.getUniformLocation( normalShaderProgram, "lightDir" );
+				halfWay_loc = gl.getUniformLocation( normalShaderProgram, "halfWay" );
+				sampler_loc = gl.getUniformLocation(normalShaderProgram, "sampler");
+                sampler_loc2= gl.getUniformLocation(normalShaderProgram, "sampler2");            
+				gl.useProgram(normalShaderProgram);
+			}
+		}
+		
+		/* Debug the shader compile status by providing the Id of the shader */
+		function debugShader(shaderId){
+			compiledF = gl.getShaderParameter(shaderId, gl.COMPILE_STATUS);
+			console.log('Shader compiled successfully: ' + compiledF);
+			if(!compiledF){
+				var compilationLog = gl.getShaderInfoLog(shaderId);
+				console.log('Shader compiler log: \n' + compilationLog);
+			}
+		}
+
+
+        /* Rendering */
+        function setUniforms() {
+            // part 1: set & upload transformation matrices:
+            var view = camera.getView();
+            var aspectRatio = canvas.width / canvas.height;
+            var projection = perspectiveMatrixFOV(60, aspectRatio, 0.5, 50.0);
+
+            var mvp = multMatrix(view, model.top());
+            mvp = multMatrix(projection, mvp);
+            gl.uniformMatrix4fv(mvp_loc, false, new Float32Array(mvp));
+
+            // part 2: set & upload light directions etc
+            var lightDir = [-1.5, 1.2, 1.5, 0];
+            var viewDir = [0, 0, 1, 0]; // eye space, for now
+            var halfWay = [];
+
+            var modelInv = invMatrix4(model.top());
+            var viewInv = invMatrix4(view);
+			
+			// L <- inv(V) * L
+            lightDir = multMatrixVec(modelInv, lightDir); 
+            lightDir = normVec(lightDir);
+
+            // view dir: from eye space (always) to object
+            viewDir = multMatrixVec(viewInv, viewDir);
+            viewDir = multMatrixVec(modelInv, viewDir);
+            viewDir = normVec(viewDir);
+
+            halfWay = [viewDir[0] + lightDir[0],
+                viewDir[1] + lightDir[1],
+                viewDir[2] + lightDir[2],
+                0
+            ];
+            halfWay = normVec(halfWay);
+
+            if(curShader != 2){
+                gl.uniform3f(lightDir_loc, lightDir[0], lightDir[1], lightDir[2]);
+                gl.uniform3f(halfWay_loc, halfWay[0], halfWay[1], halfWay[2]);
+            }
+            if(curShader == 0 || curShader == 2) 
+                gl.uniform3f(colDiffuse_loc,colDiffuse[0], colDiffuse[1], colDiffuse[2]);
+            if(curShader == 1 || curShader == 3){           
+                gl.uniform1i(sampler_loc, 0);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture_object);
+                
+                if(curShader == 3){
+                    gl.uniform1i(sampler_loc2, 1);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, normal_object);  
+
+                }
+            }
+        }
+
+		/*
+		 *	Draw functions
+		*/
+
+        // Draws a cylinder with bases
+        function drawFullCyl() {
+            // we are in fullcyl space     
+            // side area:
+            setUniforms();
+            cyl.draw(gl);
+            // top base: flattened cone
+            model.push();
+            model.translate(0, 1, 0);
+            model.scale(1, 0.001, 1);
+            setUniforms();
+            cone.draw(gl);
+            model.pop();
+            // bottom base: flattened cone
+            model.push();
+            model.translate(0, -1, 0);
+            model.scale(1, 0.001, -1);
+            setUniforms();
+            cone.draw(gl);
+            model.pop();
+        }
+
+        function drawTrackball() {
+            if(!document.getElementById("trackballBoundsCB").checked) return;
+            setColor(1, 1, 1);
+            toggleShader(2);
+			// First Torus
+            model.push();
+            model.scale(trackball.r, trackball.r, trackball.r);
+            setUniforms();
+            torus.draw(gl);
+            model.pop();
+			// Second Torus
+            model.push();
+            model.scale(trackball.r, trackball.r, trackball.r);
+            model.mult(rotationXMatrix( 90 ));
+            setUniforms();
+            torus.draw(gl);
+            model.pop();
+			// Third Torus
+            model.push();
+            model.scale(trackball.r, trackball.r, trackball.r);
+            model.mult(rotationZMatrix( 90 ));
+            setUniforms();
+            torus.draw(gl);
+            model.pop(); // Back to World Space
+        }
+
+        // Draws a table (height h)
+        function drawTable(/*float*/ h) {
+            setColor(0.76, 0.76, 1.0);
+			toggleShader(0);
+            model.translate(0, -2, 0);
+            // lower base:
+            model.push();
+            model.translate(0, 1, 0);
+            model.scale(4, 1, 4);
+            drawFullCyl();
+            model.pop(); // back to Table space!   
+            // upper base:
+            model.push();
+            model.translate(0, h - 1, 0);
+            model.scale(10, 1, 10);
+            drawFullCyl();
+            model.pop(); // back to Table space!
+            // pillar A:
+            model.push();
+            model.translate(0, (h) / 2, 0);
+            model.scale(3.2, (h - 4) / 2, 3.2);
+            setUniforms();
+            cone.draw(gl);
+            model.pop(); // back to Table space!
+            // pillar B:
+            model.push();
+            model.translate(0, (h) / 2, 0);
+            model.scale(3.2, -(h - 4) / 2, -3.2);
+            setUniforms();
+            cone.draw(gl);
+            model.pop(); // back to Table space!
+			// board on top of the table
+			model.push();
+			model.translate(0, h+0.5, 0);
+			drawBoard();
+			model.pop();
+        }
+		
+		// Draw a board with pieces
+		function drawBoard(){
+			// Board 
+			model.push();
+			setColor(0.56, 0.35, 0.03);
+            model.scale(5, 0.5, 5);
+            if(!document.getElementById("Normal").checked) toggleShader(3);
+            else toggleShader(1);
+			setUniforms();
+			cube.draw(gl);			
+			if(board_bounds == null) setBoardBounds(model.top(),[-1,0.9,-1,1],[1,1,1,1]);
+			// Pieces on top of the board
+			toggleShader(0);
+			for(let i=0;i<BOARD_SIZE;i++){
+					for(let j=0;j<BOARD_SIZE;j++){
+						if(gameModel.board[i][j] > EMPTY){	
+							model.push();
+							if(selected.length === 2 && selected[0] === i && selected[1] === j){
+								setColor(1.0,0.55,0.0);
+							}else{
+								gameModel.board[i][j]===BLACK_PIECE ? setColor(0.2,0.2,0.2) : setColor(1.0,1.0,1.0);
+							}
+							model.translate(-0.87+(j*0.29), 1.2, -0.87+(i*0.29));
+							model.scale(0.07,0.2,0.07);
+							drawFullCyl();
+							model.pop();
+						}
+				}
+			}
+			// Pieces near the board
+			for(let color=WHITE_PIECE;color<=BLACK_PIECE;color++){
+				color===BLACK_PIECE ? setColor(0.2,0.2,0.2) : setColor(1.0,1.0,1.0);
+				for(let i=0,count=9-gameModel.pieces[color];i<count;i++){
+					model.push();
+					model.translate(color===BLACK_PIECE ? 1.25 : -1.25,-0.8,(i*0.25)-1);
+					model.scale(0.07,0.2,0.07);
+					drawFullCyl();
+					model.pop();
+				}
+			}
+			model.pop();
+		}
+
+        // Rendering: fill screen buffer
+        function draw() {
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            model.init();
+			sceneRotation = Quaternion2Matrix(trackball.qcurr);
+			model.mult(sceneRotation);
+            model.scale(0.1, 0.1, 0.1);
+			model.push();
+			model.translate(0,-6,0);
+			drawTable(12);
+			model.pop();			
+            model.push();
+			drawTrackball();
+			model.pop();
+        }
+
+        function myOnLoad() {
+			setupGameEngine();
+            setupWebGL();
+            setupWhatToDraw();
+            setupHowToDraw();
+            draw();
+			gameDetailsUpdate();
+		}
+
+        var lastMousePosX, lastMousePosY;
+
+        function myMouseDown(event) {
+			let x = (2.0*(event.clientX-boundingRect.left)/canvas.width)-1;
+			let y = 1-(2.0*(event.clientY-boundingRect.top)/canvas.height);
+			// left button is held down
+			if(event.buttons === 1){ 
+				// Cast a Ray from the mouse (code in raycasting.js)
+				let view = camera.getView()
+				let projection = perspectiveMatrixFOV(60, canvas.width/canvas.height, 0.5, 50.0);
+				ray = rayFromMouse(x,y,view,projection);
+				// Intersection board check
+				inter = getIntersection(ray,board_bounds,sceneRotation);
+				// If there is an intersection
+				if(inter !== null){
+					// Rotate the intersection point to have a reference system to check
+					// intersection bounds
+					invSceneRotation = transposeMatrix4(sceneRotation);
+					inter.min = multMatrixVec(invSceneRotation,vec4(inter.min,1));
+					inter.max = multMatrixVec(invSceneRotation,vec4(inter.max,1));
+					// If the ray was casted from above the table
+					if(inter.min[1] >= inter.max[1]){
+						i = parseInt((inter.min[2]+0.5)/(1/BOARD_SIZE));
+						j = parseInt((inter.min[0]+0.5)/(1/BOARD_SIZE));
+						if(gameModel.board[i][j] != UNAVAILABLE){
+							let flag = false;
+							// Change action based on the current phase
+							switch(gameModel.phase){
+								case PLACING_PIECES: 
+									flag = gameModel.addPiece(i,j,gameModel.turn)
+									break;
+								case MOVING_PIECES:									
+									if(selected.length === 0){
+										// If no piece is selected and the piece has the right color select it
+										flag = (gameModel.board[i][j] === gameModel.turn);
+										if(flag) selected = [i,j];
+									}else{
+										if(selected[0] === i && selected[1] === j){
+											// Deselect piece if the user re-clicked on it
+											flag = true;
+											selected = [];
+										}else{
+											// Try to move the piece
+											flag = gameModel.movePiece(selected[0],selected[1],i,j);
+											// Deselect the piece only if the movement was valid
+											if(flag) selected = [];
+										}
+									}
+									break;
+								case REMOVING_PIECES:
+									flag = gameModel.removePiece(i,j);
+									break;
+								default:
+									return;
+							}
+							gameDetailsUpdate(!flag?"Invalid action":null);
+							if(flag) draw();
+						}
+					}
+				}
+			}
+			// right button is held down
+			if(event.buttons === 2){
+				// Set starting point of the trackball rotation
+				trackball.p0 = [x,y,0];
+			}
+			// mid button is held down
+			if(event.buttons === 4){
+				// record current position 
+				lastMousePosX = event.screenX;
+				lastMousePosY = event.screenY;
+			}
+        }
+        
+        function myKeyDown(event){
+                if (event.keyCode == '38') {
+                    // up arrow
+                    camera.y += (0.1);
+                    draw();
+                }
+                else if (event.keyCode == '40') {
+                    // down arrow
+                    camera.y -= (0.1);
+                    draw();
+                }
+                else if (event.keyCode == '37') {
+                   // left arrow
+                   camera.x -= (0.1);
+                   draw();
+                }
+                else if (event.keyCode == '39') {
+                   // right arrow
+                   camera.x += (0.1);
+                   draw();
+                }
+        }
+
+        function myMouseMove(event) {
+            if (event.buttons == 0) return;
+			// right button is held down
+            if (event.buttons === 2) { 
+				let x = (2.0*(event.clientX-boundingRect.left)/canvas.width)-1;
+				let y = 1-(2.0*(event.clientY-boundingRect.top)/canvas.height);
+				trackball.calculateNewRotation([x,y,0]);
+				draw();
+            }
+			var dx = event.screenX - lastMousePosX;
+			var dy = event.screenY - lastMousePosY;
+			lastMousePosX = event.screenX;
+			lastMousePosY = event.screenY;	
+			// mid button is held down
+            if (event.buttons === 4) { 
+                camera.dist *= 1.0 - dy * 0.02;
+                draw(); 
+            }
+        }
+
+        function myMouseUp(event) {
+        }
+		
+		function gameDetailsUpdate(error_message=null){
+			let desc;
+			let pieces_left = document.getElementById("pieces_left");
+			document.getElementById("active_player").innerHTML = turnToString(gameModel.turn);
+			document.getElementById("phase").innerHTML = phaseToString(gameModel.phase);
+			switch(gameModel.phase){
+				case PLACING_PIECES: desc = "In this phase the active player should try to create mills by placing a piece into an empty space. Click on an empty space to place the piece.";
+				break;
+				case MOVING_PIECES: desc = "In this phase the active player should try to create mills by moving a piece into an adjacent empty space. Click on a piece to select it and then click in adjacent empty space to move it. You can deselect a piece by re-clicking on it.<br><b>Note</b>: If you have only 3 pieces left you can move in any empty space on the map.";
+				if(pieces_left.style.display !== "none"){
+					pieces_left.style.display = "none";
+					document.getElementById("pieces_left_label").style.display = "none";
+				}
+				break;
+				case REMOVING_PIECES: desc = "In this phase the active player have to remove one of the pieces placed by the opponent. Pieces which are in a mill cannot be selected. Click on a piece in order to remove it.";
+				break;
+				case GAME_ENDED: desc = "The game ended, the winner is: "+turnToString(gameModel.turn)+".";
+				break;
+			}
+			if(pieces_left.style.display !== "none"){
+				document.getElementById("white_pieces_left").innerHTML = 9-Math.ceil(gameModel.addedPieces/2);
+				document.getElementById("black_pieces_left").innerHTML = 9-Math.floor(gameModel.addedPieces/2);
+			}
+			document.getElementById("phase_description").innerHTML = desc;
+			document.getElementById("game_error").innerHTML = error_message!==null?error_message:"";
+		}
+        
+        // register callbacks
+        window.onload = myOnLoad;
+    </script>
+</head>
+
+<body oncontextmenu="return false;">
+    <h3 class="w3-container"><b>Wooden Games : Nine Men's Morris</b></h3>
+    
+	<div class="w3-row">
+		<div class="w3-left w3-container w3-twothird" style="position:fixed;">
+			<canvas id="A-CANVAS" class="w3-border w3-border-black" width="850px" height="480px" ></canvas>
+			<div class="w3-row">
+				<input id="trackballBoundsCB" class="w3-check" type="checkbox" onclick="draw()" checked>
+				<label>Trackball Bounds</label>
+                <input id="Normal" class="w3-check" type="checkbox" onclick="draw()">
+				<label>Disable normal</label>
+			</div>
+        </div>
+		<div class="w3-right w3-container w3-third">
+			<ul class="w3-ul w3-border">
+				<li><h4><b>Game Details and Instructions:</b></h4></li>
+				<li><table class="w3-table w3-bordered">
+					<tr>
+						<th>Active Player:</th>
+						<td id="active_player"></td>
+					</tr>
+					<tr>
+						<th>Phase:</th>
+						<td id="phase"></td>
+					</tr>
+					<tr id="pieces_left_label"><th>Pieces left to place:</th></tr>
+					<tr id="pieces_left">
+						<td class="w3-center">
+							<img src="white_piece.png" style="width:2em;"/> 
+							<label id="white_pieces_left" ></label>
+						</td>
+						<td class="w3-center">
+							<img src="black_piece.png" style="width:2em;"/> 
+							<label id="black_pieces_left" ></label>
+						</td>
+					</tr>
+				</table></li>
+				<li><b>Description:</b><div id="phase_description"></div></li>
+				<li id="game_error" class="w3-text-red w3-large"></li>
+			</ul></br>
+			<ul class="w3-ul w3-border">
+				<li><h4><b>Interactions</b></h4></li>
+				<li>Left Button: Interact with the scene</li>
+				<li>Right Button: Rotate scene</li>
+				<li>Mid Button: Zoom in/out scene</li>
+                <li>Directional Buttons: Pan</li>
+			</ul>
+		</div>
+	</div>
+    
+
+    <img id="textImg" width="0px" height="0px" src="wood_gameboardText.png"> 
+    <img id="normImg" width="0px" height="0px" src="normalMap.png"> 
+
+</body>
+
+</html>
