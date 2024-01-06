@@ -14,5 +14,6 @@ Summary of the topics:
 DEMO:
 
 
-https://github.com/Naz9898/NineMenMorris/assets/52995225/de4cafa9-ac12-45d1-9bd3-974b7e4d90ea
+
+https://github.com/Naz9898/NineMenMorris/assets/52995225/16904d72-68a6-4a85-9990-168143ddfdb5
 
